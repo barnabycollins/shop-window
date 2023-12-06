@@ -1,0 +1,32 @@
+{
+  "name": "shop-window-app",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/barnabycollins/shop-window.git"
+  },
+  "author": "Barnaby Collins",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/barnabycollins/shop-window/issues"
+  },
+  "homepage": "https://github.com/barnabycollins/shop-window#readme",
+  "dependencies": {
+    "@googleapis/drive": "^8.4.0",
+    "react": "^18.2.0",
+    "vite": "^5.0.6"
+  },
+  "devDependencies": {
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.3"
+  }
+}
