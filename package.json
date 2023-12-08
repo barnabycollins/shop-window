@@ -22,11 +22,13 @@
   "dependencies": {
     "@googleapis/drive": "^8.4.0",
     "react": "^18.2.0",
-    "vite": "^5.0.6"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
     "eslint": "^8.55.0",
     "prettier": "^3.1.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vite": "^5.0.7"
   }
 }
