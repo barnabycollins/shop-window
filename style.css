@@ -8,15 +8,20 @@ html {
   font-family: sans-serif;
 }
 
-.error-msg {
-  display: flex;
-  height: 100vh;
+.mono {
+  font-family: monospace;
+}
 
+#slideshow-container {
+  height: 100vh;
+  width: 100vw;
+
+  display: flex;
   justify-content: center;
   align-items: center;
 }
 
-.error-msg > div {
+.error-msg {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -27,8 +32,4 @@ html {
 
   background-color: #ff6565;
   color: #000000;
-}
-
-.error-msg ul {
-  font-family: monospace;
 }
