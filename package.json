@@ -20,7 +20,6 @@
   },
   "homepage": "https://github.com/barnabycollins/shop-window#readme",
   "dependencies": {
-    "@googleapis/drive": "^8.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-spinners": "^0.13.8"

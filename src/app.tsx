@@ -1,31 +1,61 @@
 import ReactDOM from "react-dom/client";
 import { StrictMode, useEffect, useState } from "react";
-import { drive } from "@googleapis/drive";
 import { getQueryParams } from "./getQueryParams";
 import { BarLoader } from "react-spinners";
+import { FilesListResponse } from "./googleDriveTypes";
 
 const REQUIRED_PARAMS = ["googleApiKey", "driveFolderId"] as const;
-const OPTIONAL_PARAMS = ["rotation"] as const;
+const OPTIONAL_PARAMS = ["rotation", "slideLength"] as const;
 
 const { params, missingParams } = getQueryParams(
   REQUIRED_PARAMS,
   OPTIONAL_PARAMS
 );
 
+const slideLength = params.slideLength ? parseInt(params.slideLength, 10) : 30;
+
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);
 
-  useEffect(() => {
-    const client = drive({ version: "v3", auth: params.googleApiKey });
-    const getStuff = async () => {
-      const response = await client.files.list({
-        q: `'${params.driveFolderId}' in parents and trashed = false`,
-      });
-      console.log(response);
-    };
+  const [imgUrls, setImgUrls] = useState<string[]>([]);
 
-    getStuff();
+  const [shownIndex, setShownIndex] = useState(0);
+
+  useEffect(() => {
+    async function getStuff() {
+      console.log("fetching");
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files?` +
+          new URLSearchParams({
+            key: params.googleApiKey,
+            q: `'${params.driveFolderId}' in parents and trashed = false`,
+          })
+      );
+
+      const body = (await response.json()) as FilesListResponse;
+
+      setImgUrls(
+        body.files.map(
+          (f) => `https://drive.google.com/uc?export=view&id=${f.id}`
+        )
+      );
+
+      setIsLoaded(true);
+    }
+    if (missingParams.length === 0) getStuff();
   }, []);
+
+  useEffect(() => {
+    if (isLoaded && imgUrls.length > 0) {
+      const interval = setInterval(() => {
+        setShownIndex((current) => (current + 1) % imgUrls.length);
+      }, slideLength * 1000);
+
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [isLoaded]);
 
   return missingParams.length > 0 ? (
     <div className="error-msg">
@@ -42,7 +72,16 @@ function App() {
       </p>
     </div>
   ) : isLoaded ? (
-    <h1>yes!</h1>
+    <>
+      {imgUrls.map((url, index) => (
+        <img
+          className="slide-img"
+          style={{ opacity: index >= shownIndex ? 1 : 0, zIndex: -index }}
+          key={url}
+          src={url}
+        />
+      ))}
+    </>
   ) : (
     <BarLoader color="#ffffff" />
   );
