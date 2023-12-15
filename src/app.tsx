@@ -12,7 +12,9 @@ const { params, missingParams } = getQueryParams(
   OPTIONAL_PARAMS
 );
 
-const slideLength = params.slideLength ? parseInt(params.slideLength, 10) : 30;
+const slideLength = params.slideLength
+  ? Math.max(parseInt(params.slideLength, 10), 1)
+  : 30;
 
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -20,6 +22,8 @@ function App() {
   const [imgUrls, setImgUrls] = useState<string[]>([]);
 
   const [shownIndex, setShownIndex] = useState(0);
+
+  const [showLowerItems, setShowLowerItems] = useState(true);
 
   useEffect(() => {
     async function getStuff() {
@@ -48,7 +52,13 @@ function App() {
   useEffect(() => {
     if (isLoaded && imgUrls.length > 0) {
       const interval = setInterval(() => {
-        setShownIndex((current) => (current + 1) % imgUrls.length);
+        setShownIndex((current) => {
+          const next = (current + 1) % imgUrls.length;
+          if (next === 0) {
+            setShowLowerItems(false);
+          }
+          return next;
+        });
       }, slideLength * 1000);
 
       return () => {
@@ -56,6 +66,12 @@ function App() {
       };
     }
   }, [isLoaded]);
+
+  useEffect(() => {
+    if (shownIndex === 0) {
+      setTimeout(() => setShowLowerItems(true), 500);
+    }
+  }, [shownIndex]);
 
   return missingParams.length > 0 ? (
     <div className="error-msg">
@@ -76,7 +92,11 @@ function App() {
       {imgUrls.map((url, index) => (
         <img
           className="slide-img"
-          style={{ opacity: index >= shownIndex ? 1 : 0, zIndex: -index }}
+          style={{
+            opacity:
+              index >= shownIndex && (index === 0 || showLowerItems) ? 1 : 0,
+            zIndex: -index,
+          }}
           key={url}
           src={url}
         />

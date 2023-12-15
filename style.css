@@ -45,4 +45,6 @@ html {
   object-fit: contain;
 
   transition: opacity 0.5s;
+
+  background-color: #000000;
 }
