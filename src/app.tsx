@@ -12,9 +12,18 @@ const { params, missingParams } = getQueryParams(
   OPTIONAL_PARAMS
 );
 
-const slideLength = params.slideLength
-  ? Math.max(parseInt(params.slideLength, 10), 1)
-  : 30;
+const slideLength =
+  (params.slideLength ? Math.max(parseInt(params.slideLength, 10), 1) : 30) *
+  1000;
+
+const supportedMimeTypes = [
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/svg+xml",
+  "image/webp",
+];
 
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -26,8 +35,7 @@ function App() {
   const [showLowerItems, setShowLowerItems] = useState(true);
 
   useEffect(() => {
-    async function getStuff() {
-      console.log("fetching");
+    async function fetchImages() {
       const response = await fetch(
         `https://www.googleapis.com/drive/v3/files?` +
           new URLSearchParams({
@@ -39,14 +47,18 @@ function App() {
       const body = (await response.json()) as FilesListResponse;
 
       setImgUrls(
-        body.files.map(
-          (f) => `https://drive.google.com/uc?export=view&id=${f.id}`
-        )
+        body.files
+          .filter((f) => supportedMimeTypes.includes(f.mimeType))
+          .map(
+            (f) =>
+              `https://drive.google.com/uc?` +
+              new URLSearchParams({ export: "view", id: f.id })
+          )
       );
 
       setIsLoaded(true);
     }
-    if (missingParams.length === 0) getStuff();
+    if (missingParams.length === 0) fetchImages();
   }, []);
 
   useEffect(() => {
@@ -59,7 +71,7 @@ function App() {
           }
           return next;
         });
-      }, slideLength * 1000);
+      }, slideLength);
 
       return () => {
         clearInterval(interval);
@@ -69,7 +81,7 @@ function App() {
 
   useEffect(() => {
     if (shownIndex === 0) {
-      setTimeout(() => setShowLowerItems(true), 500);
+      setTimeout(() => setShowLowerItems(true), slideLength / 2);
     }
   }, [shownIndex]);
 
