@@ -5,7 +5,7 @@ import { BarLoader } from "react-spinners";
 import { FilesListResponse } from "./googleDriveTypes";
 
 const REQUIRED_PARAMS = ["googleApiKey", "driveFolderId"] as const;
-const OPTIONAL_PARAMS = ["rotation", "slideLength"] as const;
+const OPTIONAL_PARAMS = ["rotation", "slideLength", "sharedDriveId"] as const;
 
 const { params, missingParams } = getQueryParams(
   REQUIRED_PARAMS,
@@ -41,6 +41,13 @@ function App() {
           new URLSearchParams({
             key: params.googleApiKey,
             q: `'${params.driveFolderId}' in parents and trashed = false`,
+            ...(params.sharedDriveId
+              ? {
+                  includeItemsFromAllDrives: "true",
+                  supportsAllDrives: "true",
+                  driveId: params.sharedDriveId,
+                }
+              : {}),
           })
       );
 
