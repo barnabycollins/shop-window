@@ -46,6 +46,7 @@ function App() {
                   includeItemsFromAllDrives: "true",
                   supportsAllDrives: "true",
                   driveId: params.sharedDriveId,
+                  corpora: "drive",
                 }
               : {}),
           })
