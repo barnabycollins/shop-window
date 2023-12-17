@@ -24,5 +24,7 @@ export function getQueryParams<R extends string, O extends string>(
     if (value) params[name] = value;
   });
 
+  console.debug(`Received params:`, params);
+
   return { params, missingParams } as Return;
 }
