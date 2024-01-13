@@ -2,7 +2,10 @@ import ReactDOM from "react-dom/client";
 import { StrictMode, useEffect, useState } from "react";
 import { getQueryParams } from "./getQueryParams";
 import { BarLoader } from "react-spinners";
-import { FilesListResponse } from "./googleDriveTypes";
+import {
+  FilesListResponse,
+  GOOGLE_DRIVE_EXPANDED_FILE_FIELDS,
+} from "./googleDriveTypes";
 
 const REQUIRED_PARAMS = ["googleApiKey", "driveFolderId"] as const;
 const OPTIONAL_PARAMS = [
@@ -10,6 +13,7 @@ const OPTIONAL_PARAMS = [
   "slideLength",
   "sharedDriveId",
   "animate",
+  "refetchInterval",
 ] as const;
 
 const rotationMap: { [key: string]: string } = {
@@ -29,6 +33,7 @@ const apiUrl =
   new URLSearchParams({
     key: params.googleApiKey,
     q: `'${params.driveFolderId}' in parents and trashed = false`,
+    fields: `files(${GOOGLE_DRIVE_EXPANDED_FILE_FIELDS.join(",")})`,
     ...(params.sharedDriveId
       ? {
           includeItemsFromAllDrives: "true",
@@ -42,6 +47,10 @@ const apiUrl =
 const slideLength =
   (params.slideLength ? Math.max(parseInt(params.slideLength, 10), 1) : 30) *
   1000;
+
+const refetchInterval = params.refetchInterval
+  ? parseInt(params.refetchInterval, 10) * 60 * 1000
+  : undefined;
 
 const animate = params.animate === "false" ? false : true;
 
@@ -96,12 +105,22 @@ function App() {
       setImgUrls(
         body.files
           .filter((f) => supportedMimeTypes.includes(f.mimeType))
-          .map((f) => `https://drive.google.com/uc?export=view&id=${f.id}`)
+          .map((f) => `https://lh3.googleusercontent.com/d/${f.id}`)
       );
 
       setIsLoaded(true);
     }
-    if (missingParams.length === 0) fetchImages();
+
+    if (missingParams.length === 0) {
+      fetchImages();
+
+      if (refetchInterval) {
+        const interval = setInterval(fetchImages, refetchInterval);
+        return () => {
+          clearInterval(interval);
+        };
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -123,60 +142,62 @@ function App() {
     }
   }, [isLoaded]);
 
-  return missingParams.length > 0 ? (
-    <div className="error-msg">
-      <h1>Shop Window App: Error</h1>
-      <p>The following required input(s) are missing from the URL:</p>
-      <ul className="mono">
-        {missingParams.map((name) => (
-          <li key={name}>{name}</li>
-        ))}
-      </ul>
-      <p>Please add them to the URL, in the format: </p>
-      <p className="mono">
-        https://url.for.page/?name1=value1&name2=value2&name3=value3
-      </p>
-      <p>You can also provide the following optional inputs:</p>
-      <ul className="mono">
-        {OPTIONAL_PARAMS.map((p) => (
-          <li key={p} className={params[p] ? "italic" : undefined}>{`${p}${
-            params[p] ? `: ${params[p]}` : ""
-          }`}</li>
-        ))}
-      </ul>
-      <p>
-        For more information, visit the{" "}
-        <a
-          href="https://github.com/barnabycollins/shop-window/blob/main/README.md"
-          target="_blank"
-          rel="noreferrer"
-        >
-          project documentation
-        </a>{" "}
-        on GitHub.
-      </p>
-    </div>
-  ) : isLoaded ? (
+  return (
     <div id="rotation-container" style={rotationContainerStyle}>
-      {imgUrls.map((url, index) => (
-        <img
-          className="slide-img"
-          style={{
-            opacity:
-              index >= shownIndex &&
-              (index === 0 || index === imgUrls.length - 1 || showMiddleItems)
-                ? 1
-                : 0,
-            zIndex: -index,
-            transition: animate ? "opacity 0.5s" : "none",
-          }}
-          key={url}
-          src={url}
-        />
-      ))}
+      {missingParams.length > 0 ? (
+        <div className="error-msg">
+          <h1>Shop Window App: Error</h1>
+          <p>The following required input(s) are missing from the URL:</p>
+          <ul className="mono">
+            {missingParams.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+          <p>Please add them to the URL, in the format: </p>
+          <p className="mono">
+            https://url.for.page/?name1=value1&name2=value2&name3=value3
+          </p>
+          <p>You can also provide the following optional inputs:</p>
+          <ul className="mono">
+            {OPTIONAL_PARAMS.map((p) => (
+              <li key={p} className={params[p] ? "italic" : undefined}>{`${p}${
+                params[p] ? `: ${params[p]}` : ""
+              }`}</li>
+            ))}
+          </ul>
+          <p>
+            For more information, visit the{" "}
+            <a
+              href="https://github.com/barnabycollins/shop-window/blob/main/README.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              project documentation
+            </a>{" "}
+            on GitHub.
+          </p>
+        </div>
+      ) : isLoaded ? (
+        imgUrls.map((url, index) => (
+          <img
+            className="slide-img"
+            style={{
+              opacity:
+                index >= shownIndex &&
+                (index === 0 || index === imgUrls.length - 1 || showMiddleItems)
+                  ? 1
+                  : 0,
+              zIndex: -index,
+              transition: animate ? "opacity 0.5s" : undefined,
+            }}
+            key={url}
+            src={url}
+          />
+        ))
+      ) : (
+        <BarLoader color="#ffffff" />
+      )}
     </div>
-  ) : (
-    <BarLoader color="#ffffff" />
   );
 }
 
