@@ -20,17 +20,17 @@
   },
   "homepage": "https://github.com/barnabycollins/shop-window#readme",
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-spinners": "^0.13.8"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-spinners": "^0.14.1"
   },
   "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "eslint": "^8.55.0",
-    "prettier": "^3.1.0",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.7"
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^9.7.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3"
   }
 }
