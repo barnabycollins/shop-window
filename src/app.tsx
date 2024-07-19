@@ -11,7 +11,6 @@ import {
   rotation,
   OPTIONAL_PARAMS,
 } from "./getParams";
-import { FilesListResponse } from "./googleDriveTypes";
 import { MissingParamsBox } from "./MissingParamsBox";
 
 const rotationContainerStyle: CSSProperties = {
@@ -31,15 +30,6 @@ const rotationContainerStyle: CSSProperties = {
       }),
 };
 
-const supportedMimeTypes = [
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/svg+xml",
-  "image/webp",
-];
-
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -53,14 +43,7 @@ function App() {
   // Fetch image list from Google Drive; populate imgUrls.
   useEffect(() => {
     async function fetchImages() {
-      const response = await fetch(apiUrl);
-      const body = (await response.json()) as FilesListResponse;
-
-      setImgUrls(
-        body.files
-          .filter((f) => supportedMimeTypes.includes(f.mimeType))
-          .map((f) => `https://lh3.googleusercontent.com/d/${f.id}`)
-      );
+      setImgUrls();
 
       setIsLoaded(true);
     }
