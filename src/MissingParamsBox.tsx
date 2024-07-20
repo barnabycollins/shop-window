@@ -9,6 +9,14 @@ export function MissingParamsBox({
   optionalParams,
   givenParams,
 }: ErrorMessageProps) {
+  const optionalSetParams = optionalParams.filter(
+    (p) => p in givenParams && givenParams[p] !== undefined
+  );
+
+  const optionalUnsetParams = optionalParams.filter(
+    (p) => !optionalSetParams.includes(p)
+  );
+
   return (
     <div className="error-msg">
       <h1>Shop Window App: Error</h1>
@@ -20,16 +28,29 @@ export function MissingParamsBox({
       </ul>
       <p>Please add them to the URL, in the format: </p>
       <p className="mono">
-        https://url.for.page/?name1=value1&name2=value2&name3=value3
+        https://url.for.page/?
+        <span className="emphasis">name1=value1&name2=value2&name3=value3</span>
       </p>
-      <p>You can also provide the following optional inputs:</p>
-      <ul className="mono">
-        {optionalParams.map((p) => (
-          <li key={p} className={givenParams[p] ? "italic" : undefined}>{`${p}${
-            givenParams[p] ? `: ${givenParams[p]}` : ""
-          }`}</li>
-        ))}
-      </ul>
+      {optionalSetParams.length > 0 && (
+        <>
+          <p>You have provided the following optional inputs:</p>
+          <ul className="mono">
+            {optionalSetParams.map((p) => (
+              <li key={p}>{`${p}: ${givenParams[p]}`}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {optionalUnsetParams.length > 0 && (
+        <>
+          <p>You can also provide the following optional inputs:</p>
+          <ul className="mono">
+            {optionalUnsetParams.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </>
+      )}
       <p>
         For more information, visit the{" "}
         <a

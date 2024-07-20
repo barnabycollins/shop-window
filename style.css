@@ -12,8 +12,9 @@ html {
   font-family: monospace;
 }
 
-.italic {
-  font-style: italic;
+.emphasis {
+  text-decoration: underline;
+  font-weight: bold;
 }
 
 #rotation-container,

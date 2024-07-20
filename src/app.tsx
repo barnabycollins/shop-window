@@ -1,114 +1,133 @@
 import ReactDOM from "react-dom/client";
-import { CSSProperties, StrictMode, useEffect, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { BarLoader } from "react-spinners";
-import {
-  params,
-  missingParams,
-  apiUrl,
-  slideLength,
-  refetchInterval,
-  animate,
-  rotation,
-  OPTIONAL_PARAMS,
-} from "./getParams";
+import { AppConfig, getAppConfig, RotationValue } from "./appConfig";
 import { MissingParamsBox } from "./MissingParamsBox";
+import { MissingParamsError, ParamValidationError } from "./errors";
 
-const rotationContainerStyle: CSSProperties = {
-  ...(rotation
-    ? {
-        transform: `rotate(${rotation}deg)`,
-      }
-    : {}),
-  ...(rotation === "90" || rotation === "270"
-    ? {
-        height: "100vw",
-        width: "100vh",
-      }
-    : {
-        height: "100vh",
-        width: "100vw",
-      }),
-};
+function getRotationContainerStyle(rotation: RotationValue) {
+  return {
+    ...(rotation
+      ? {
+          transform: `rotate(${rotation}deg)`,
+        }
+      : {}),
+    ...(rotation === 90 || rotation === 270
+      ? {
+          height: "100vw",
+          width: "100vh",
+        }
+      : {
+          height: "100vh",
+          width: "100vw",
+        }),
+  };
+}
 
 function App() {
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  const [imgUrls, setImgUrls] = useState<string[]>([]);
+  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
 
   const [shownIndex, setShownIndex] = useState(0);
 
   const [showMiddleItems, setShowMiddleItems] = useState(true);
 
+  const [appConfig, setAppConfig] = useState<AppConfig | undefined>(undefined);
+
+  const [setupError, setSetupError] = useState<
+    Error | MissingParamsError | ParamValidationError | undefined
+  >(undefined);
+
   // Executed on first load.
   // Fetch image list from Google Drive; populate imgUrls.
   useEffect(() => {
     async function fetchImages() {
-      setImgUrls();
+      try {
+        const { mediaUrls, ...config } = await getAppConfig();
+        setMediaUrls(mediaUrls);
+        setAppConfig(config);
 
-      setIsLoaded(true);
-    }
-
-    if (missingParams.length === 0) {
-      fetchImages();
-
-      if (refetchInterval) {
-        const interval = setInterval(fetchImages, refetchInterval);
-        return () => {
-          clearInterval(interval);
-        };
+        if (config.refetchInterval) {
+          const interval = setInterval(fetchImages, config.refetchInterval);
+          return () => {
+            clearInterval(interval);
+          };
+        }
+      } catch (error) {
+        setSetupError(error as Error);
       }
     }
+    fetchImages();
   }, []);
 
   // Executed once images are loaded.
   // Sets an interval to trigger the slideshow.
   useEffect(() => {
-    if (isLoaded && imgUrls.length > 0) {
+    if (appConfig && mediaUrls.length > 0) {
       const interval = setInterval(() => {
         setShownIndex((current) => {
-          const next = (current + 1) % imgUrls.length;
+          const next = (current + 1) % mediaUrls.length;
           if (next === 0) {
             setShowMiddleItems(false);
-            setTimeout(() => setShowMiddleItems(true), slideLength / 2);
+            setTimeout(
+              () => setShowMiddleItems(true),
+              appConfig.slideLength / 2
+            );
           }
           return next;
         });
-      }, slideLength);
+      }, appConfig.slideLength);
 
       return () => {
         clearInterval(interval);
       };
     }
-  }, [isLoaded]);
+  }, [appConfig, mediaUrls]);
 
   return (
-    <div id="rotation-container" style={rotationContainerStyle}>
-      {missingParams.length > 0 ? (
-        <MissingParamsBox
-          missingParams={missingParams}
-          optionalParams={OPTIONAL_PARAMS}
-          givenParams={params}
-        />
-      ) : isLoaded ? (
-        imgUrls.map((url, index) => (
-          <img
-            className="slide-img"
-            style={{
-              opacity:
-                index >= shownIndex &&
-                (index === 0 || index === imgUrls.length - 1 || showMiddleItems)
-                  ? 1
-                  : 0,
-              zIndex: -index,
-              transition: animate ? "opacity 0.5s" : undefined,
-            }}
-            key={url}
-            src={url}
-          />
-        ))
-      ) : (
-        <BarLoader color="#ffffff" />
-      )}
+    <div
+      id="rotation-container"
+      style={getRotationContainerStyle(appConfig?.rotation ?? 0)}
+    >
+      {(() => {
+        if (setupError) {
+          if ("id" in setupError) {
+            if (setupError.id === "MissingParams") {
+              return (
+                <MissingParamsBox
+                  missingParams={setupError.missingParams}
+                  givenParams={setupError.givenParams}
+                  optionalParams={setupError.optionalParams}
+                />
+              );
+            }
+          }
+
+          return setupError.toString();
+        }
+
+        if (appConfig) {
+          return mediaUrls.map((url, index) => (
+            <img
+              key={url}
+              className="slide-img"
+              style={{
+                opacity:
+                  index >= shownIndex &&
+                  (index === 0 ||
+                    index === mediaUrls.length - 1 ||
+                    showMiddleItems)
+                    ? 1
+                    : 0,
+                zIndex: -index,
+                transition: appConfig ? "opacity 0.5s" : undefined,
+              }}
+              src={url}
+            />
+          ));
+        }
+
+        return <BarLoader color="#ffffff" />;
+      })()}
     </div>
   );
 }
