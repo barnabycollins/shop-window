@@ -4,7 +4,7 @@ export type FilesListResponse = {
   files: Record<(typeof GOOGLE_DRIVE_EXPANDED_FILE_FIELDS)[number], string>[];
 };
 
-export function getGoogleDriveHostUrl(fileId: string) {
+export function getGoogleDrivePublicImageUrl(fileId: string) {
   return `https://lh3.googleusercontent.com/d/${fileId}`;
 }
 
@@ -31,7 +31,10 @@ export function listGoogleDriveFilesUrl(
   );
 }
 
-export function getGoogleDriveFile(googleApiKey: string, fileId: string) {
+export function getGoogleDriveFileWithApi(
+  googleApiKey: string,
+  fileId: string
+) {
   return (
     `https://www.googleapis.com/drive/v3/files/${fileId}?` +
     new URLSearchParams({

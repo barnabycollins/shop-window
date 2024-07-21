@@ -1,7 +1,19 @@
 import ReactDOM from "react-dom/client";
-import { StrictMode, useEffect, useState } from "react";
+import {
+  Fragment,
+  StrictMode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { BarLoader } from "react-spinners";
-import { AppConfig, getAppConfig, RotationValue } from "./appConfig";
+import {
+  AppConfig,
+  getAppConfig,
+  MediaEntry,
+  RotationValue,
+} from "./appConfig";
 import { ErrorMessageBox } from "./MissingParamsBox";
 import { ParamError } from "./errors";
 
@@ -25,7 +37,9 @@ function getRotationContainerStyle(rotation: RotationValue) {
 }
 
 function App() {
-  const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const videoRefs = useRef<{ [url: string]: HTMLVideoElement }>({});
+
+  const [mediaEntries, setMediaEntries] = useState<MediaEntry[]>([]);
 
   const [shownIndex, setShownIndex] = useState(0);
 
@@ -37,51 +51,65 @@ function App() {
     undefined
   );
 
+  const showNextMediaItem = useCallback(
+    (c: AppConfig, m: MediaEntry[]) => {
+      console.log("showing next item");
+      setShownIndex((current) => {
+        const next = (current + 1) % m.length;
+
+        const nextEntry = m[next];
+
+        const videoRef =
+          nextEntry.mimeType.startsWith("video") &&
+          nextEntry.url in videoRefs.current
+            ? videoRefs.current[nextEntry.url]
+            : undefined;
+
+        if (videoRef) {
+          videoRefs.current[nextEntry.url].pause();
+          videoRefs.current[nextEntry.url].currentTime = 0;
+          videoRefs.current[nextEntry.url].play();
+        }
+
+        setTimeout(
+          () => showNextMediaItem(c, m),
+          videoRef
+            ? videoRef.duration * 1000 - (c.animate ? 500 : 0)
+            : c.slideLength
+        );
+
+        if (next === 0) {
+          setShowMiddleItems(false);
+          setTimeout(() => setShowMiddleItems(true), c.slideLength / 2);
+        }
+        return next;
+      });
+    },
+    [appConfig, mediaEntries]
+  );
+
   // Executed on first load.
   // Fetch image list from Google Drive; populate imgUrls.
   useEffect(() => {
     async function fetchImages() {
       try {
-        const { mediaUrls, ...config } = await getAppConfig();
-        setMediaUrls(mediaUrls);
+        const { mediaEntries: mediaUrls, ...config } = await getAppConfig();
+        setMediaEntries(mediaUrls);
         setAppConfig(config);
 
+        let interval: number | undefined;
+
         if (config.refetchInterval) {
-          const interval = setInterval(fetchImages, config.refetchInterval);
-          return () => {
-            clearInterval(interval);
-          };
+          interval = setInterval(fetchImages, config.refetchInterval);
         }
+
+        showNextMediaItem(config, mediaUrls);
       } catch (error) {
         setSetupError(error as ParamError);
       }
     }
     fetchImages();
   }, []);
-
-  // Executed once images are loaded.
-  // Sets an interval to trigger the slideshow.
-  useEffect(() => {
-    if (appConfig && mediaUrls.length > 0) {
-      const interval = setInterval(() => {
-        setShownIndex((current) => {
-          const next = (current + 1) % mediaUrls.length;
-          if (next === 0) {
-            setShowMiddleItems(false);
-            setTimeout(
-              () => setShowMiddleItems(true),
-              appConfig.slideLength / 2
-            );
-          }
-          return next;
-        });
-      }, appConfig.slideLength);
-
-      return () => {
-        clearInterval(interval);
-      };
-    }
-  }, [appConfig, mediaUrls]);
 
   return (
     <div
@@ -94,24 +122,38 @@ function App() {
         }
 
         if (appConfig) {
-          return mediaUrls.map((url, index) => (
-            <img
-              key={url}
-              className="slide-img"
-              style={{
+          return mediaEntries.map(({ mimeType, url }, index) => {
+            const commonProps = {
+              src: url,
+              style: {
                 opacity:
                   index >= shownIndex &&
                   (index === 0 ||
-                    index === mediaUrls.length - 1 ||
+                    index === mediaEntries.length - 1 ||
                     showMiddleItems)
                     ? 1
                     : 0,
                 zIndex: -index,
-                transition: appConfig ? "opacity 0.5s" : undefined,
-              }}
-              src={url}
-            />
-          ));
+                transition: appConfig.animate ? "opacity 0.5s" : undefined,
+              },
+              className: "slide-img",
+            } as const;
+
+            return (
+              <Fragment key={url}>
+                {mimeType.startsWith("video") ? (
+                  <video
+                    {...commonProps}
+                    ref={(element) => {
+                      if (element) videoRefs.current[url] = element;
+                    }}
+                  />
+                ) : (
+                  <img {...commonProps} />
+                )}
+              </Fragment>
+            );
+          });
         }
 
         return <BarLoader color="#ffffff" />;

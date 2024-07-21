@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
   FilesListResponse,
-  getGoogleDriveFile,
-  getGoogleDriveHostUrl,
+  getGoogleDriveFileWithApi,
+  getGoogleDrivePublicImageUrl,
   listGoogleDriveFilesUrl,
 } from "./googleDrive";
 import { oneOf } from "./paramValidation";
@@ -40,10 +40,10 @@ const BOOLEAN_PARAMS: (RequiredParam | OptionalParam)[] = [
 const jsonParamSchema = z
   .object({
     rotation: oneOf(rotationValues),
-    slideLength: z.number().int().gt(5),
+    slideLength: z.number().int().gte(5),
     animate: z.boolean(),
     enableRefetch: z.boolean(),
-    refetchInterval: z.number().int().gt(1),
+    refetchInterval: z.number().int().gte(1),
     enabledMimeTypes: z.string().min(3).array(),
   })
   .partial();
@@ -68,8 +68,13 @@ type UrlParams = z.infer<typeof urlParamSchema>;
 
 export type AppConfig = z.infer<typeof appConfigSchema>;
 
+export type MediaEntry = {
+  url: string;
+  mimeType: string;
+};
+
 type AppConfigWithMediaUrls = AppConfig & {
-  mediaUrls: string[];
+  mediaEntries: MediaEntry[];
 };
 
 const defaultConfig: AppConfig = {
@@ -85,6 +90,7 @@ const defaultConfig: AppConfig = {
     "image/png",
     "image/svg+xml",
     "image/webp",
+    "video/mp4",
   ],
 };
 
@@ -173,8 +179,9 @@ export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
       let currentFileContent: JsonParams = {};
 
       try {
+        throw new Error("egg!");
         const fileResponse = await fetch(
-          getGoogleDriveFile(urlParamsConfig.googleApiKey, file.id)
+          getGoogleDriveFileWithApi(urlParamsConfig.googleApiKey, file.id)
         );
 
         try {
@@ -221,27 +228,44 @@ export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
     }
   }
 
-  const resolvedConfig: AppConfig = {
+  const mergedConfig: AppConfig = {
     ...defaultConfig,
     ...urlParamsConfig,
     ...jsonConfig,
   };
 
-  const validationResult = appConfigSchema.safeParse(resolvedConfig);
+  const validationResult = appConfigSchema.safeParse(mergedConfig);
 
   if (!validationResult.success)
     throwParamValidationError(validationResult.error, { stage: "finalCheck" });
 
-  resolvedConfig.slideLength *= 1000;
-  if (resolvedConfig.refetchInterval)
-    resolvedConfig.refetchInterval *= 60 * 1000;
+  mergedConfig.slideLength *= 1000;
+  if (mergedConfig.refetchInterval) mergedConfig.refetchInterval *= 60 * 1000;
 
-  console.debug(`Resolved app config:`, resolvedConfig);
-
-  return {
-    ...resolvedConfig,
-    mediaUrls: mediaListBody.files
-      .filter((f) => resolvedConfig.enabledMimeTypes.includes(f.mimeType))
-      .map((f) => getGoogleDriveHostUrl(f.id)),
+  const finalConfig: AppConfigWithMediaUrls = {
+    ...mergedConfig,
+    mediaEntries: mediaListBody.files
+      .filter((f) => mergedConfig.enabledMimeTypes.includes(f.mimeType))
+      .sort((a, b) => {
+        const x = a.name.toLowerCase();
+        const y = b.name.toLowerCase();
+        if (x < y) {
+          return -1;
+        }
+        if (x > y) {
+          return 1;
+        }
+        return 0;
+      })
+      .map((f) => ({
+        mimeType: f.mimeType,
+        url: f.mimeType.startsWith("video")
+          ? getGoogleDriveFileWithApi(urlParamsConfig.googleApiKey, f.id)
+          : getGoogleDrivePublicImageUrl(f.id),
+      })),
   };
+
+  console.debug(`Resolved app config:`, finalConfig);
+
+  return finalConfig;
 }
