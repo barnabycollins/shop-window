@@ -1,25 +1,26 @@
-type ErrorMessageProps = {
-  missingParams: string[];
-  optionalParams: readonly string[];
-  givenParams: { [key: string]: string };
+import {
+  issueFeedback,
+  MissingParamsError,
+  ParamError,
+  ParamValidationError,
+} from "./errors";
+
+type ErrorMessageBoxProps = {
+  error: ParamError;
 };
 
-export function MissingParamsBox({
-  missingParams,
-  optionalParams,
-  givenParams,
-}: ErrorMessageProps) {
+function MissingParamsContent({ error }: { error: MissingParamsError }) {
+  const { optionalParams, givenParams, missingParams } = error;
+
   const optionalSetParams = optionalParams.filter(
     (p) => p in givenParams && givenParams[p] !== undefined
   );
-
   const optionalUnsetParams = optionalParams.filter(
     (p) => !optionalSetParams.includes(p)
   );
 
   return (
-    <div className="error-msg">
-      <h1>Shop Window App: Error</h1>
+    <>
       <p>The following required input(s) are missing from the URL:</p>
       <ul className="mono">
         {missingParams.map((name) => (
@@ -62,6 +63,58 @@ export function MissingParamsBox({
         </a>{" "}
         on GitHub.
       </p>
+    </>
+  );
+}
+
+function ParamValidationContent({ error }: { error: ParamValidationError }) {
+  return (
+    <>
+      <p>
+        Failed to validate the following fields when{" "}
+        {(() => {
+          switch (error.context.stage) {
+            case "urlParams": {
+              return "reading provided URL parameters";
+            }
+            case "jsonParams": {
+              return `parsing JSON file "${error.context.fileName}" from the provided Google Drive folder`;
+            }
+            case "finalCheck": {
+              return `performing final check`;
+            }
+          }
+        })()}
+        :
+      </p>
+      <ul className="mono">
+        {error.zodError.issues.map((issue) => (
+          <li key={`${issue.path.join(".")} ${issue.code}`}>
+            {issueFeedback(issue)}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+export function ErrorMessageBox({ error }: ErrorMessageBoxProps) {
+  return (
+    <div className="error-msg">
+      <h1>Shop Window App: Error</h1>
+      {(() => {
+        switch (error.name) {
+          case "MissingParamsError": {
+            return <MissingParamsContent error={error} />;
+          }
+          case "ParamValidationError": {
+            return <ParamValidationContent error={error} />;
+          }
+          default: {
+            return error.toString();
+          }
+        }
+      })()}
     </div>
   );
 }

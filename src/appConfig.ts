@@ -6,7 +6,7 @@ import {
   listGoogleDriveFilesUrl,
 } from "./googleDrive";
 import { oneOf } from "./paramValidation";
-import { throwCustomError } from "./errors";
+import { issueFeedback, throwParamValidationError } from "./errors";
 
 const REQUIRED_PARAMS = ["googleApiKey", "driveFolderId"] as const;
 type RequiredParam = (typeof REQUIRED_PARAMS)[number];
@@ -15,8 +15,10 @@ const OPTIONAL_PARAMS = [
   "slideLength",
   "sharedDriveId",
   "animate",
+  "enableRefetch",
   "refetchInterval",
   "enabledMimeTypes",
+  "strictJsonParsing",
 ] as const;
 type OptionalParam = (typeof OPTIONAL_PARAMS)[number];
 
@@ -29,13 +31,18 @@ const NUMERIC_PARAMS: (RequiredParam | OptionalParam)[] = [
 const rotationValues = [0, 90, 180, 270] as const;
 export type RotationValue = (typeof rotationValues)[number];
 
-const BOOLEAN_PARAMS: (RequiredParam | OptionalParam)[] = ["animate"];
+const BOOLEAN_PARAMS: (RequiredParam | OptionalParam)[] = [
+  "animate",
+  "enableRefetch",
+  "strictJsonParsing",
+];
 
 const jsonParamSchema = z
   .object({
     rotation: oneOf(rotationValues),
     slideLength: z.number().int().gt(5),
     animate: z.boolean(),
+    enableRefetch: z.boolean(),
     refetchInterval: z.number().int().gt(1),
     enabledMimeTypes: z.string().min(3).array(),
   })
@@ -45,18 +52,15 @@ const urlParamSchema = jsonParamSchema.extend({
   googleApiKey: z.string().min(1),
   driveFolderId: z.string().min(1),
   sharedDriveId: z.optional(z.string().min(1)),
+  strictJsonParsing: z.optional(z.boolean()),
 });
 
-const appConfigSchema = urlParamSchema
-  .required()
-  .extend({
-    refetchInterval: z.optional(z.number().int().gt(1)),
-  })
-  .omit({
-    googleApiKey: true,
-    driveFolderId: true,
-    sharedDriveId: true,
-  });
+const appConfigSchema = urlParamSchema.required().omit({
+  googleApiKey: true,
+  driveFolderId: true,
+  sharedDriveId: true,
+  strictJsonParsing: true,
+});
 
 type JsonParams = z.infer<typeof jsonParamSchema>;
 
@@ -72,6 +76,8 @@ const defaultConfig: AppConfig = {
   slideLength: 30,
   animate: true,
   rotation: 0,
+  enableRefetch: false,
+  refetchInterval: 3,
   enabledMimeTypes: [
     "image/avif",
     "image/gif",
@@ -82,10 +88,18 @@ const defaultConfig: AppConfig = {
   ],
 };
 
-function parseBoolean(input: string) {
+function attemptToParseBoolean(input: string) {
   if (input === "true") return true;
   if (input === "false") return false;
-  return null;
+  return input;
+}
+
+function attemptToParseNumber(input: string) {
+  const output = Number(input);
+  if (Number.isNaN(output)) {
+    return input;
+  }
+  return output;
 }
 
 function getQueryParams(): UrlParams {
@@ -105,10 +119,13 @@ function getQueryParams(): UrlParams {
   const finalParams = Object.fromEntries(
     Object.entries(receivedParams)
       .map(([key, value]) => {
-        if (key in NUMERIC_PARAMS)
-          return [key, Number(value)] as [string, number];
-        if (key in BOOLEAN_PARAMS)
-          return [key, parseBoolean(value)] as [string, boolean | null];
+        if ((NUMERIC_PARAMS as string[]).includes(key))
+          return [key, attemptToParseNumber(value)] as [string, number];
+        if ((BOOLEAN_PARAMS as string[]).includes(key))
+          return [key, attemptToParseBoolean(value)] as [
+            string,
+            boolean | null,
+          ];
         return [key, value] as [string, string];
       })
       .filter(
@@ -125,9 +142,10 @@ function getQueryParams(): UrlParams {
       )
   );
 
-  const result = urlParamSchema.safeParse(finalParams);
+  const validationResult = urlParamSchema.safeParse(finalParams);
 
-  if (!result.success) throwCustomError(result.error, { stage: "urlParams" });
+  if (!validationResult.success)
+    throwParamValidationError(validationResult.error, { stage: "urlParams" });
 
   return finalParams as UrlParams;
 }
@@ -161,14 +179,7 @@ export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
 
         try {
           currentFileContent = await fileResponse.json();
-
-          const result = jsonParamSchema.safeParse(currentFileContent);
-
-          if (!result.success)
-            throwCustomError(result.error, {
-              stage: "jsonParams",
-              fileName: file.name,
-            });
+          console.debug(`Loaded "${file.name}": `, currentFileContent);
         } catch (e) {
           console.error(`Failed to parse JSON file ${file.name}!`);
         }
@@ -177,6 +188,30 @@ export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
           `Failed to retrieve JSON configuration file ${file.name}:`,
           e
         );
+      }
+
+      const validationResult = jsonParamSchema.safeParse(currentFileContent);
+
+      if (!validationResult.success) {
+        if (urlParamsConfig.strictJsonParsing === true) {
+          throwParamValidationError(validationResult.error, {
+            stage: "jsonParams",
+            fileName: file.name,
+          });
+        } else {
+          console.error(
+            `Failed to parse ${file.name}:`,
+            validationResult.error.issues.map((i) => issueFeedback(i))
+          );
+          currentFileContent = Object.fromEntries(
+            Object.entries(currentFileContent).filter(
+              ([key]) =>
+                !validationResult.error.issues.some(
+                  (issue) => issue.path[0] === key
+                )
+            )
+          );
+        }
       }
 
       jsonConfig = {
@@ -192,9 +227,10 @@ export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
     ...jsonConfig,
   };
 
-  const result = appConfigSchema.safeParse(resolvedConfig);
+  const validationResult = appConfigSchema.safeParse(resolvedConfig);
 
-  if (!result.success) throwCustomError(result.error, { stage: "finalCheck" });
+  if (!validationResult.success)
+    throwParamValidationError(validationResult.error, { stage: "finalCheck" });
 
   resolvedConfig.slideLength *= 1000;
   if (resolvedConfig.refetchInterval)

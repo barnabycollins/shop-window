@@ -2,8 +2,8 @@ import ReactDOM from "react-dom/client";
 import { StrictMode, useEffect, useState } from "react";
 import { BarLoader } from "react-spinners";
 import { AppConfig, getAppConfig, RotationValue } from "./appConfig";
-import { MissingParamsBox } from "./MissingParamsBox";
-import { MissingParamsError, ParamValidationError } from "./errors";
+import { ErrorMessageBox } from "./MissingParamsBox";
+import { ParamError } from "./errors";
 
 function getRotationContainerStyle(rotation: RotationValue) {
   return {
@@ -33,9 +33,9 @@ function App() {
 
   const [appConfig, setAppConfig] = useState<AppConfig | undefined>(undefined);
 
-  const [setupError, setSetupError] = useState<
-    Error | MissingParamsError | ParamValidationError | undefined
-  >(undefined);
+  const [setupError, setSetupError] = useState<ParamError | undefined>(
+    undefined
+  );
 
   // Executed on first load.
   // Fetch image list from Google Drive; populate imgUrls.
@@ -53,7 +53,7 @@ function App() {
           };
         }
       } catch (error) {
-        setSetupError(error as Error);
+        setSetupError(error as ParamError);
       }
     }
     fetchImages();
@@ -90,19 +90,7 @@ function App() {
     >
       {(() => {
         if (setupError) {
-          if ("id" in setupError) {
-            if (setupError.id === "MissingParams") {
-              return (
-                <MissingParamsBox
-                  missingParams={setupError.missingParams}
-                  givenParams={setupError.givenParams}
-                  optionalParams={setupError.optionalParams}
-                />
-              );
-            }
-          }
-
-          return setupError.toString();
+          return <ErrorMessageBox error={setupError} />;
         }
 
         if (appConfig) {
