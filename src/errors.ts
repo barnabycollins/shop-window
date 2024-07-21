@@ -45,6 +45,26 @@ export class ParamValidationError extends Error {
 
 type SomeOtherError = Omit<Error, "name"> & { name: "SomethingElse" };
 
+export class MissingConfigError extends Error {
+  public readonly name = "MissingConfigError";
+
+  constructor(currentOperation: string, appConfig: any) {
+    super(
+      `Tried to call ${currentOperation} but appContext was missing! Provided appConfig: ${JSON.stringify(appConfig)}`
+    );
+  }
+}
+
+export class MissingMediaError extends Error {
+  public readonly name = "MissingMediaError";
+
+  constructor(currentOperation: string, mediaEntries: any) {
+    super(
+      `Tried to call ${currentOperation} but mediaEntries was missing! Provided mediaEntries: ${JSON.stringify(mediaEntries)}`
+    );
+  }
+}
+
 export type ParamError =
   | ParamValidationError
   | MissingParamsError

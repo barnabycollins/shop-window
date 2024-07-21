@@ -11,13 +11,14 @@ export function getGoogleDrivePublicImageUrl(fileId: string) {
 export function listGoogleDriveFilesUrl(
   googleApiKey: string,
   driveFolderId: string,
+  mimeTypes: string[],
   sharedDriveId?: string
 ) {
   return (
     `https://www.googleapis.com/drive/v3/files?` +
     new URLSearchParams({
       key: googleApiKey,
-      q: `'${driveFolderId}' in parents and trashed = false`,
+      q: `'${driveFolderId}' in parents and trashed = false and (${mimeTypes.map((type) => `mimeType = '${type}'`).join(" or ")})`,
       fields: `files(${GOOGLE_DRIVE_EXPANDED_FILE_FIELDS.join(",")})`,
       supportsAllDrives: "true",
       includeItemsFromAllDrives: "true",

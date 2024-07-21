@@ -8,9 +8,61 @@ import {
 import { oneOf } from "./paramValidation";
 import { issueFeedback, throwParamValidationError } from "./errors";
 
-const REQUIRED_PARAMS = ["googleApiKey", "driveFolderId"] as const;
-type RequiredParam = (typeof REQUIRED_PARAMS)[number];
-const OPTIONAL_PARAMS = [
+const rotationValues = [0, 90, 180, 270] as const;
+export type RotationValue = (typeof rotationValues)[number];
+
+const allConfigSchema = z.object({
+  googleApiKey: z.string().min(1),
+  driveFolderId: z.string().min(1),
+  sharedDriveId: z.string().min(1),
+  strictJsonParsing: z.boolean(),
+  rotation: oneOf(rotationValues),
+  slideLength: z.number().int().gte(5),
+  animate: z.boolean(),
+  enableRefetch: z.boolean(),
+  refetchInterval: z.number().int().gte(1),
+  enabledMimeTypes: z.string().min(3).array(),
+});
+
+const urlParamSchema = allConfigSchema
+  .partial()
+  .required({ googleApiKey: true, driveFolderId: true });
+
+const jsonParamSchema = allConfigSchema
+  .omit({
+    googleApiKey: true,
+    driveFolderId: true,
+    sharedDriveId: true,
+    strictJsonParsing: true,
+  })
+  .partial();
+
+const defaultConfigSchema = allConfigSchema.omit({
+  googleApiKey: true,
+  driveFolderId: true,
+  sharedDriveId: true,
+});
+
+const appConfigSchema = urlParamSchema
+  .omit({
+    strictJsonParsing: true,
+  })
+  .required()
+  .partial({ sharedDriveId: true });
+
+type ParamNameArray = (keyof z.infer<typeof allConfigSchema>)[];
+
+type JsonParams = z.infer<typeof jsonParamSchema>;
+
+type UrlParams = z.infer<typeof urlParamSchema>;
+
+type DefaultConfig = z.infer<typeof defaultConfigSchema>;
+
+export type AppConfig = z.infer<typeof appConfigSchema>;
+
+const REQUIRED_PARAMS: ParamNameArray = ["googleApiKey", "driveFolderId"];
+
+const OPTIONAL_PARAMS: ParamNameArray = [
   "rotation",
   "slideLength",
   "sharedDriveId",
@@ -19,70 +71,32 @@ const OPTIONAL_PARAMS = [
   "refetchInterval",
   "enabledMimeTypes",
   "strictJsonParsing",
-] as const;
-type OptionalParam = (typeof OPTIONAL_PARAMS)[number];
+];
 
-const NUMERIC_PARAMS: (RequiredParam | OptionalParam)[] = [
+const NUMERIC_PARAMS: ParamNameArray = [
   "rotation",
   "slideLength",
   "refetchInterval",
 ];
 
-const rotationValues = [0, 90, 180, 270] as const;
-export type RotationValue = (typeof rotationValues)[number];
-
-const BOOLEAN_PARAMS: (RequiredParam | OptionalParam)[] = [
+const BOOLEAN_PARAMS: ParamNameArray = [
   "animate",
   "enableRefetch",
   "strictJsonParsing",
 ];
-
-const jsonParamSchema = z
-  .object({
-    rotation: oneOf(rotationValues),
-    slideLength: z.number().int().gte(5),
-    animate: z.boolean(),
-    enableRefetch: z.boolean(),
-    refetchInterval: z.number().int().gte(1),
-    enabledMimeTypes: z.string().min(3).array(),
-  })
-  .partial();
-
-const urlParamSchema = jsonParamSchema.extend({
-  googleApiKey: z.string().min(1),
-  driveFolderId: z.string().min(1),
-  sharedDriveId: z.optional(z.string().min(1)),
-  strictJsonParsing: z.optional(z.boolean()),
-});
-
-const appConfigSchema = urlParamSchema.required().omit({
-  googleApiKey: true,
-  driveFolderId: true,
-  sharedDriveId: true,
-  strictJsonParsing: true,
-});
-
-type JsonParams = z.infer<typeof jsonParamSchema>;
-
-type UrlParams = z.infer<typeof urlParamSchema>;
-
-export type AppConfig = z.infer<typeof appConfigSchema>;
 
 export type MediaEntry = {
   url: string;
   mimeType: string;
 };
 
-type AppConfigWithMediaUrls = AppConfig & {
-  mediaEntries: MediaEntry[];
-};
-
-const defaultConfig: AppConfig = {
+const defaultConfig: DefaultConfig = {
   slideLength: 30,
   animate: true,
   rotation: 0,
   enableRefetch: false,
   refetchInterval: 3,
+  strictJsonParsing: false,
   enabledMimeTypes: [
     "image/avif",
     "image/gif",
@@ -156,30 +170,26 @@ function getQueryParams(): UrlParams {
   return finalParams as UrlParams;
 }
 
-export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
+export async function getAppConfig(): Promise<AppConfig> {
   const urlParamsConfig = getQueryParams();
 
   const response = await fetch(
     listGoogleDriveFilesUrl(
       urlParamsConfig.googleApiKey,
       urlParamsConfig.driveFolderId,
+      ["application/json"],
       urlParamsConfig.sharedDriveId
     )
   );
-  const mediaListBody = (await response.json()) as FilesListResponse;
-
-  const jsonFiles = mediaListBody.files.filter(
-    (f) => f.mimeType === "application/json"
-  );
+  const jsonFiles = (await response.json()) as FilesListResponse;
 
   let jsonConfig: JsonParams = {};
 
-  if (jsonFiles.length > 0) {
-    for (const file of jsonFiles) {
+  if (jsonFiles.files.length > 0) {
+    for (const file of jsonFiles.files) {
       let currentFileContent: JsonParams = {};
 
       try {
-        throw new Error("egg!");
         const fileResponse = await fetch(
           getGoogleDriveFileWithApi(urlParamsConfig.googleApiKey, file.id)
         );
@@ -242,30 +252,39 @@ export async function getAppConfig(): Promise<AppConfigWithMediaUrls> {
   mergedConfig.slideLength *= 1000;
   if (mergedConfig.refetchInterval) mergedConfig.refetchInterval *= 60 * 1000;
 
-  const finalConfig: AppConfigWithMediaUrls = {
-    ...mergedConfig,
-    mediaEntries: mediaListBody.files
-      .filter((f) => mergedConfig.enabledMimeTypes.includes(f.mimeType))
-      .sort((a, b) => {
-        const x = a.name.toLowerCase();
-        const y = b.name.toLowerCase();
-        if (x < y) {
-          return -1;
-        }
-        if (x > y) {
-          return 1;
-        }
-        return 0;
-      })
-      .map((f) => ({
-        mimeType: f.mimeType,
-        url: f.mimeType.startsWith("video")
-          ? getGoogleDriveFileWithApi(urlParamsConfig.googleApiKey, f.id)
-          : getGoogleDrivePublicImageUrl(f.id),
-      })),
-  };
+  console.debug(`Resolved app config:`, mergedConfig);
 
-  console.debug(`Resolved app config:`, finalConfig);
+  return mergedConfig;
+}
 
-  return finalConfig;
+export async function getMedia(config: AppConfig): Promise<MediaEntry[]> {
+  const response = await fetch(
+    listGoogleDriveFilesUrl(
+      config.googleApiKey,
+      config.driveFolderId,
+      config.enabledMimeTypes,
+      config.sharedDriveId
+    )
+  );
+
+  const mediaResult = (await response.json()) as FilesListResponse;
+
+  return mediaResult.files
+    .sort((a, b) => {
+      const x = a.name.toLowerCase();
+      const y = b.name.toLowerCase();
+      if (x < y) {
+        return -1;
+      }
+      if (x > y) {
+        return 1;
+      }
+      return 0;
+    })
+    .map((f) => ({
+      mimeType: f.mimeType,
+      url: f.mimeType.startsWith("video")
+        ? getGoogleDriveFileWithApi(config.googleApiKey, f.id)
+        : getGoogleDrivePublicImageUrl(f.id),
+    }));
 }
