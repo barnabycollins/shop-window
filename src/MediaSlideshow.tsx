@@ -23,12 +23,7 @@ export function MediaSlideshow({
 
     const isValidVideo =
       nextEntry.mimeType.startsWith("video") &&
-      nextEntry.url in mediaEntries &&
-      (
-        mediaEntries[currentEntry.current].element as
-          | HTMLVideoElement
-          | undefined
-      )?.duration;
+      (nextEntry.element as HTMLVideoElement | undefined)?.duration;
 
     let slideLength = config.slideLength;
 
@@ -37,6 +32,8 @@ export function MediaSlideshow({
         .element as HTMLVideoElement;
 
       if (videoRef) {
+        console.debug(`Triggering playback for video "${nextEntry.name}".`);
+
         videoRef.pause();
         videoRef.currentTime = 0;
         videoRef.play().catch(() => {
@@ -77,7 +74,6 @@ export function MediaSlideshow({
       src: url,
       style: {
         opacity: 0,
-        zIndex: -1,
         transition:
           fadeTime && fadeTime > 0 ? `opacity ${fadeTime}s` : undefined,
       },

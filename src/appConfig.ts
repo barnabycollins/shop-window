@@ -86,6 +86,7 @@ type MediaMimeType = `${"video" | "image"}/${string}`;
 type MediaEntry = {
   url: string;
   mimeType: MediaMimeType;
+  name: string;
 };
 
 export type MediaEntryWithElement = MediaEntry & {
@@ -169,6 +170,8 @@ function getQueryParams(): UrlParams {
   if (!validationResult.success)
     throwParamValidationError(validationResult.error, { stage: "urlParams" });
 
+  console.debug("Resolved URL params:", finalParams);
+
   return finalParams as UrlParams;
 }
 
@@ -205,8 +208,10 @@ export async function getAppConfig(signal: AbortSignal): Promise<AppConfig> {
 
             try {
               currentFileContent = await fileResponse.json();
-              currentFileContent = {};
-              console.debug(`Loaded "${file.name}": `, currentFileContent);
+              console.debug(
+                `Resolved "${file.name}" from Drive folder: `,
+                currentFileContent
+              );
             } catch (e) {
               console.error(`Failed to parse JSON file ${file.name}!`);
             }
@@ -266,7 +271,7 @@ export async function getAppConfig(signal: AbortSignal): Promise<AppConfig> {
       if (mergedConfig.refetchInterval)
         mergedConfig.refetchInterval *= 60 * 1000;
 
-      console.debug(`Resolved app config:`, mergedConfig);
+      console.debug(`Resolved app config, including defaults:`, mergedConfig);
 
       return resolve(mergedConfig);
     });
@@ -315,6 +320,7 @@ export async function getMediaEntries(
             url: f.mimeType.startsWith("video")
               ? getGoogleDriveFileWithApi(config.googleApiKey, f.id)
               : getGoogleDrivePublicImageUrl(f.id),
+            name: f.name,
           }))
       );
     });
