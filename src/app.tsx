@@ -1,22 +1,16 @@
 import ReactDOM from "react-dom/client";
-import {
-  Fragment,
-  StrictMode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { BarLoader } from "react-spinners";
 import {
   AppConfig,
   getAppConfig,
-  getMedia,
-  MediaEntry,
+  getMediaEntries,
+  MediaEntryWithElement,
   RotationValue,
 } from "./appConfig";
 import { ErrorMessageBox } from "./MissingParamsBox";
-import { MissingConfigError, MissingMediaError, ParamError } from "./errors";
+import { MissingConfigError, ParamError } from "./errors";
+import { MediaSlideshow } from "./MediaSlideshow";
 
 function getRotationContainerStyle(rotation: RotationValue) {
   return {
@@ -38,139 +32,92 @@ function getRotationContainerStyle(rotation: RotationValue) {
 }
 
 function App() {
-  const appConfig = useRef<AppConfig | undefined>(undefined);
-  const mediaEntries = useRef<MediaEntry[]>([]);
+  const [appConfig, setAppConfig] = useState<AppConfig | undefined>(undefined);
 
-  const videoRefs = useRef<{ [url: string]: HTMLVideoElement }>({});
-
-  const [shownIndex, setShownIndex] = useState(0);
-
-  const [showMiddleItems, setShowMiddleItems] = useState(true);
+  const [mediaEntries, setMediaEntries] = useState<MediaEntryWithElement[]>([]);
 
   const [setupError, setSetupError] = useState<ParamError | undefined>(
     undefined
   );
 
-  const fetchMedia = useCallback(async () => {
-    if (!appConfig.current)
-      throw new MissingConfigError("showNextMediaItem()", appConfig.current);
+  const fetchMediaList = useCallback(
+    async (config: AppConfig, signal: AbortSignal) => {
+      if (!config) throw new MissingConfigError("fetchMediaList()", config);
 
-    const entries = await getMedia(appConfig.current);
-    mediaEntries.current = entries;
-  }, []);
+      const entries = await getMediaEntries(config, signal);
 
-  const showNextMediaItem = useCallback(() => {
-    setShownIndex((current) => {
-      if (!appConfig.current)
-        throw new MissingConfigError("showNextMediaItem()", appConfig.current);
-      if (!mediaEntries.current || mediaEntries.current.length === 0)
-        throw new MissingMediaError(
-          "showNextMediaItem()",
-          mediaEntries.current
-        );
+      setMediaEntries(entries);
+    },
+    []
+  );
 
-      const next = (current + 1) % mediaEntries.current.length;
-
-      const nextEntry = mediaEntries.current[next];
-
-      const videoRef =
-        nextEntry.mimeType.startsWith("video") &&
-        nextEntry.url in videoRefs.current
-          ? videoRefs.current[nextEntry.url]
-          : undefined;
-
-      if (videoRef) {
-        videoRefs.current[nextEntry.url].pause();
-        videoRefs.current[nextEntry.url].currentTime = 0;
-        videoRefs.current[nextEntry.url].play();
-      }
-
-      setTimeout(
-        showNextMediaItem,
-        videoRef
-          ? videoRef.duration * 1000 - (appConfig.current.animate ? 500 : 0)
-          : appConfig.current.slideLength
-      );
-
-      if (next === 0) {
-        setShowMiddleItems(false);
-        setTimeout(
-          () => setShowMiddleItems(true),
-          appConfig.current.slideLength / 2
-        );
-      }
-      return next;
-    });
-  }, []);
-
-  // Executed on first load.
-  // Fetch image list from Google Drive; populate imgUrls.
   useEffect(() => {
-    async function fetchConfig() {
-      try {
-        const config = await getAppConfig();
-        appConfig.current = config;
-        fetchMedia();
+    const abortController = new AbortController();
 
-        if (config.refetchInterval) {
-          setInterval(fetchMedia, config.refetchInterval);
+    let clearMediaTimeout: (() => void) | undefined;
+
+    async function setUp(signal: AbortSignal) {
+      return new Promise<void>((resolve, reject) => {
+        if (signal.aborted) {
+          return reject(signal.reason);
         }
-      } catch (error) {
-        setSetupError(error as ParamError);
-      }
+
+        getAppConfig(signal)
+          .then(async (config) => {
+            setAppConfig(config);
+
+            await fetchMediaList(config, signal);
+
+            setSetupError(undefined);
+
+            resolve();
+          })
+          .catch((error) => {
+            setSetupError(error as ParamError);
+            return resolve();
+          });
+
+        signal.addEventListener("abort", () => {
+          reject(signal.reason);
+        });
+      });
     }
-    fetchConfig();
+    setUp(abortController.signal);
+
+    return () => {
+      abortController.abort();
+      if (clearMediaTimeout !== undefined) clearMediaTimeout();
+    };
   }, []);
+
+  useEffect(() => {
+    if (appConfig?.refetchInterval) {
+      const abortController = new AbortController();
+      let interval = setInterval(() => {
+        fetchMediaList(appConfig, abortController.signal);
+      }, appConfig.refetchInterval);
+
+      return () => {
+        abortController.abort();
+        clearInterval(interval);
+      };
+    }
+  }, [appConfig?.refetchInterval]);
 
   return (
     <div
       id="rotation-container"
-      style={getRotationContainerStyle(appConfig.current?.rotation ?? 0)}
+      style={getRotationContainerStyle(appConfig?.rotation ?? 0)}
     >
       {(() => {
         if (setupError) {
           return <ErrorMessageBox error={setupError} />;
         }
 
-        if (
-          appConfig.current &&
-          mediaEntries.current &&
-          mediaEntries.current.length > 0
-        ) {
-          return mediaEntries.current.map(({ mimeType, url }, index) => {
-            const commonProps = {
-              src: url,
-              style: {
-                opacity:
-                  index >= shownIndex &&
-                  (index === 0 ||
-                    index === mediaEntries.current.length - 1 ||
-                    showMiddleItems)
-                    ? 1
-                    : 0,
-                zIndex: -index,
-                transition: appConfig.current!.animate
-                  ? "opacity 0.5s"
-                  : undefined,
-              },
-              className: "slide-img",
-            } as const;
-
-            return (
-              <Fragment key={url}>
-                {mimeType.startsWith("video") ? (
-                  <video
-                    {...commonProps}
-                    ref={(element) => {
-                      if (element) videoRefs.current[url] = element;
-                    }}
-                  />
-                ) : (
-                  <img {...commonProps} />
-                )}
-              </Fragment>
-            );
-          });
+        if (appConfig && mediaEntries && Object.keys(mediaEntries).length > 0) {
+          return (
+            <MediaSlideshow config={appConfig} mediaEntries={mediaEntries} />
+          );
         }
 
         return <BarLoader color="#ffffff" />;
@@ -180,7 +127,7 @@ function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("slideshow-container")!).render(
-  // <StrictMode>
-  <App />
-  // </StrictMode>
+  <StrictMode>
+    <App />
+  </StrictMode>
 );
