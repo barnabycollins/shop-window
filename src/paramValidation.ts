@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+// https://stackoverflow.com/a/74921781
 // This signature might be a bit overkill but these are the types
 // z.literal allows.
 export function oneOf<

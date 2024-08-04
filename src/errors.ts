@@ -55,16 +55,6 @@ export class MissingConfigError extends Error {
   }
 }
 
-export class MissingMediaError extends Error {
-  public readonly name = "MissingMediaError";
-
-  constructor(currentOperation: string, mediaEntries: any) {
-    super(
-      `Tried to call ${currentOperation} but mediaEntries was missing! Provided mediaEntries: ${JSON.stringify(mediaEntries)}`
-    );
-  }
-}
-
 export type ParamError =
   | ParamValidationError
   | MissingParamsError

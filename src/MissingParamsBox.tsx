@@ -52,17 +52,6 @@ function MissingParamsContent({ error }: { error: MissingParamsError }) {
           </ul>
         </>
       )}
-      <p>
-        For more information, visit the{" "}
-        <a
-          href="https://github.com/barnabycollins/shop-window/blob/main/README.md"
-          target="_blank"
-          rel="noreferrer"
-        >
-          project documentation
-        </a>{" "}
-        on GitHub.
-      </p>
     </>
   );
 }
@@ -115,6 +104,17 @@ export function ErrorMessageBox({ error }: ErrorMessageBoxProps) {
           }
         }
       })()}
+      <p>
+        For more information, visit the{" "}
+        <a
+          href="https://github.com/barnabycollins/shop-window/blob/main/README.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          project documentation
+        </a>{" "}
+        on GitHub.
+      </p>
     </div>
   );
 }

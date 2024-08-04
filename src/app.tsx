@@ -12,6 +12,9 @@ import { ErrorMessageBox } from "./MissingParamsBox";
 import { MissingConfigError, ParamError } from "./errors";
 import { MediaSlideshow } from "./MediaSlideshow";
 
+/**
+ * Get the correct inline styles for the rotation container, based on the rotation set via config.
+ */
 function getRotationContainerStyle(rotation: RotationValue) {
   return {
     ...(rotation
@@ -31,6 +34,10 @@ function getRotationContainerStyle(rotation: RotationValue) {
   };
 }
 
+/**
+ * The main app. Controls retrieval of config and media entries, and rendering of
+ * the correct components depending on the application state.
+ */
 function App() {
   const [appConfig, setAppConfig] = useState<AppConfig | undefined>(undefined);
 
@@ -40,17 +47,19 @@ function App() {
     undefined
   );
 
+  /**
+   * Retrieves the media list, and stores it in mediaEntries.
+   */
   const fetchMediaList = useCallback(
     async (config: AppConfig, signal: AbortSignal) => {
       if (!config) throw new MissingConfigError("fetchMediaList()", config);
 
-      const entries = await getMediaEntries(config, signal);
-
-      setMediaEntries(entries);
+      setMediaEntries(await getMediaEntries(config, signal));
     },
     []
   );
 
+  // On first render, set up the application.
   useEffect(() => {
     const abortController = new AbortController();
 
@@ -90,6 +99,7 @@ function App() {
     };
   }, []);
 
+  // If a refetchInterval is set, set an interval to refetch at the correct time
   useEffect(() => {
     if (appConfig?.refetchInterval) {
       const abortController = new AbortController();
