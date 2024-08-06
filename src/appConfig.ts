@@ -11,6 +11,10 @@ import { issueFeedback, throwParamValidationError } from "./errors";
 const rotationValues = [0, 90, 180, 270] as const;
 export type RotationValue = (typeof rotationValues)[number];
 
+function mod(n: number, m: number) {
+  return ((n % m) + m) % m;
+}
+
 /**
  * Zod validation for all possible config values.
  * None should be optional here; this is controlled
@@ -181,8 +185,17 @@ function getQueryParams(): UrlParams {
   const finalParams = Object.fromEntries(
     Object.entries(receivedParams)
       .map(([key, value]) => {
-        if ((NUMERIC_PARAMS as string[]).includes(key))
-          return [key, attemptToParseNumber(value)] as [string, number];
+        if ((NUMERIC_PARAMS as string[]).includes(key)) {
+          const v = attemptToParseNumber(value);
+
+          // If using rotation and v is a valid number, return the value mod 360
+          // This allows values such as -90 to be used as well as
+          // 0, 90, 180, 270
+          if (key === "rotation" && typeof v === "number") {
+            return [key, mod(v, 360)];
+          }
+          return [key, v] as [string, number];
+        }
         if ((BOOLEAN_PARAMS as string[]).includes(key))
           return [key, attemptToParseBoolean(value)] as [
             string,
