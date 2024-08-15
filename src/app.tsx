@@ -1,131 +1,137 @@
 import ReactDOM from "react-dom/client";
-import { CSSProperties, StrictMode, useEffect, useState } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { BarLoader } from "react-spinners";
 import {
-  params,
-  missingParams,
-  apiUrl,
-  slideLength,
-  refetchInterval,
-  animate,
-  rotation,
-  OPTIONAL_PARAMS,
-} from "./getParams";
-import { FilesListResponse } from "./googleDriveTypes";
-import { MissingParamsBox } from "./MissingParamsBox";
+  AppConfig,
+  getAppConfig,
+  getMediaEntries,
+  MediaEntryWithElement,
+  RotationValue,
+} from "./appConfig";
+import { ErrorMessageBox } from "./MissingParamsBox";
+import { MissingConfigError, ParamError } from "./errors";
+import { MediaSlideshow } from "./MediaSlideshow";
 
-const rotationContainerStyle: CSSProperties = {
-  ...(rotation
-    ? {
-        transform: `rotate(${rotation}deg)`,
-      }
-    : {}),
-  ...(rotation === "90" || rotation === "270"
-    ? {
-        height: "100vw",
-        width: "100vh",
-      }
-    : {
-        height: "100vh",
-        width: "100vw",
-      }),
-};
+/**
+ * Get the correct inline styles for the rotation container, based on the rotation set via config.
+ */
+function getRotationContainerStyle(rotation: RotationValue) {
+  return {
+    ...(rotation
+      ? {
+          transform: `rotate(${rotation}deg)`,
+        }
+      : {}),
+    ...(rotation === 90 || rotation === 270
+      ? {
+          height: "100vw",
+          width: "100vh",
+        }
+      : {
+          height: "100vh",
+          width: "100vw",
+        }),
+  };
+}
 
-const supportedMimeTypes = [
-  "image/avif",
-  "image/gif",
-  "image/jpeg",
-  "image/png",
-  "image/svg+xml",
-  "image/webp",
-];
-
+/**
+ * The main app. Controls retrieval of config and media entries, and rendering of
+ * the correct components depending on the application state.
+ */
 function App() {
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [appConfig, setAppConfig] = useState<AppConfig | undefined>(undefined);
 
-  const [imgUrls, setImgUrls] = useState<string[]>([]);
+  const [mediaEntries, setMediaEntries] = useState<MediaEntryWithElement[]>([]);
 
-  const [shownIndex, setShownIndex] = useState(0);
+  const [setupError, setSetupError] = useState<ParamError | undefined>(
+    undefined
+  );
 
-  const [showMiddleItems, setShowMiddleItems] = useState(true);
+  /**
+   * Retrieves the media list, and stores it in mediaEntries.
+   */
+  const fetchMediaList = useCallback(
+    async (config: AppConfig, signal: AbortSignal) => {
+      if (!config) throw new MissingConfigError("fetchMediaList()", config);
 
-  // Executed on first load.
-  // Fetch image list from Google Drive; populate imgUrls.
+      setMediaEntries(await getMediaEntries(config, signal));
+    },
+    []
+  );
+
+  // On first render, set up the application.
   useEffect(() => {
-    async function fetchImages() {
-      const response = await fetch(apiUrl);
-      const body = (await response.json()) as FilesListResponse;
+    const abortController = new AbortController();
 
-      setImgUrls(
-        body.files
-          .filter((f) => supportedMimeTypes.includes(f.mimeType))
-          .map((f) => `https://lh3.googleusercontent.com/d/${f.id}`)
-      );
+    let clearMediaTimeout: (() => void) | undefined;
 
-      setIsLoaded(true);
+    async function setUp(signal: AbortSignal) {
+      return new Promise<void>((resolve, reject) => {
+        if (signal.aborted) {
+          return reject(signal.reason);
+        }
+
+        getAppConfig(signal)
+          .then(async (config) => {
+            setAppConfig(config);
+
+            await fetchMediaList(config, signal);
+
+            setSetupError(undefined);
+
+            resolve();
+          })
+          .catch((error) => {
+            setSetupError(error as ParamError);
+            return resolve();
+          });
+
+        signal.addEventListener("abort", () => {
+          reject(signal.reason);
+        });
+      });
     }
+    setUp(abortController.signal);
 
-    if (missingParams.length === 0) {
-      fetchImages();
-
-      if (refetchInterval) {
-        const interval = setInterval(fetchImages, refetchInterval);
-        return () => {
-          clearInterval(interval);
-        };
-      }
-    }
+    return () => {
+      abortController.abort();
+      if (clearMediaTimeout !== undefined) clearMediaTimeout();
+    };
   }, []);
 
-  // Executed once images are loaded.
-  // Sets an interval to trigger the slideshow.
+  // If a refetchInterval is set, set an interval to refetch at the correct time
   useEffect(() => {
-    if (isLoaded && imgUrls.length > 0) {
-      const interval = setInterval(() => {
-        setShownIndex((current) => {
-          const next = (current + 1) % imgUrls.length;
-          if (next === 0) {
-            setShowMiddleItems(false);
-            setTimeout(() => setShowMiddleItems(true), slideLength / 2);
-          }
-          return next;
-        });
-      }, slideLength);
+    if (appConfig?.refetchInterval) {
+      const abortController = new AbortController();
+      let interval = setInterval(() => {
+        fetchMediaList(appConfig, abortController.signal);
+      }, appConfig.refetchInterval);
 
       return () => {
+        abortController.abort();
         clearInterval(interval);
       };
     }
-  }, [isLoaded]);
+  }, [appConfig?.refetchInterval]);
 
   return (
-    <div id="rotation-container" style={rotationContainerStyle}>
-      {missingParams.length > 0 ? (
-        <MissingParamsBox
-          missingParams={missingParams}
-          optionalParams={OPTIONAL_PARAMS}
-          givenParams={params}
-        />
-      ) : isLoaded ? (
-        imgUrls.map((url, index) => (
-          <img
-            className="slide-img"
-            style={{
-              opacity:
-                index >= shownIndex &&
-                (index === 0 || index === imgUrls.length - 1 || showMiddleItems)
-                  ? 1
-                  : 0,
-              zIndex: -index,
-              transition: animate ? "opacity 0.5s" : undefined,
-            }}
-            key={url}
-            src={url}
-          />
-        ))
-      ) : (
-        <BarLoader color="#ffffff" />
-      )}
+    <div
+      id="rotation-container"
+      style={getRotationContainerStyle(appConfig?.rotation ?? 0)}
+    >
+      {(() => {
+        if (setupError) {
+          return <ErrorMessageBox error={setupError} />;
+        }
+
+        if (appConfig && mediaEntries && Object.keys(mediaEntries).length > 0) {
+          return (
+            <MediaSlideshow config={appConfig} mediaEntries={mediaEntries} />
+          );
+        }
+
+        return <BarLoader color="#ffffff" />;
+      })()}
     </div>
   );
 }
